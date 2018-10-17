@@ -68,7 +68,8 @@ let rec normal_beta_reduction lambda_expr =
           App (normal_beta_reduction l1, l2)
 ;;
 
-type lambda_reference = Var_ref of string
+type lambda_reference 
+  = Var_ref of string
   | Abs_ref of string * lambda_reference ref
   | App_ref of lambda_reference ref * lambda_reference ref;;
 
