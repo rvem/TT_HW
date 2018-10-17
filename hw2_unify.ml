@@ -46,10 +46,10 @@ let solve_system s =
         (match (t1, t2) with
         | (Fun (f1, l1'), Fun (f2, l2')) -> 
             if (f1 = f2) then
-              unify_system (List.append (List.combine l1' l2') tail) l2
+              unify_system ((List.combine l1' l2') @ tail) l2
             else
               raise Unify_exception
-        | (Fun (f, l), Var x) -> unify_system ((t1, t2) :: tail) l2
+        | (Fun (f, l), Var x) -> unify_system ((t2, t1) :: tail) l2
         | (Var x, _) -> 
           if is_used x t2 then
             raise Unify_exception
