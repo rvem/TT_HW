@@ -32,7 +32,7 @@ let rec is_normal_form lambda_expr = match lambda_expr with
 let cnt = ref 0;;
 
 let next_name () = 
-  let name = "x" ^ string_of_int !cnt in
+  let name = "sample_name" ^ string_of_int !cnt in
   cnt := !cnt + 1;
   name
 ;;
@@ -47,7 +47,7 @@ let rec is_alpha_equivalent lambda_expr1 lambda_expr2 =
   match (lambda_expr1, lambda_expr2) with
   | (Var x, Var y) -> x = y
   | (Abs (x1, l1), Abs (x2, l2)) -> 
-    let tmp = Var (next_name ()) in 
+    let tmp = Var (next_name ()) in
       is_alpha_equivalent (subst tmp l1 x1) (subst tmp l2 x2)
   | (App (l11, l12), App (l21, l22)) -> is_alpha_equivalent l11 l21 && is_alpha_equivalent l12 l22
   | _ -> false
@@ -76,28 +76,28 @@ type lambda_reference
 let reduce_to_normal_form lambda = 
   let rec to_ref lambda = match lambda with 
     | Var x -> ref (Var_ref x)
-    | Abs(x, l) -> ref (Abs_ref(x, to_ref l))
-    | App(l1, l2) -> ref (App_ref(to_ref l1, to_ref l1)) in
+    | Abs (x, l) -> ref (Abs_ref (x, to_ref l))
+    | App (l1, l2) -> ref (App_ref (to_ref l1, to_ref l2)) in
   let rec to_lambda lambda = match !lambda with 
     | Var_ref x -> Var x
-    | Abs_ref(x, l) ->Abs(x, to_lambda l)
-    | App_ref(l1, l2) -> App(to_lambda l1, to_lambda l2) in
+    | Abs_ref (x, l) -> Abs (x, to_lambda l)
+    | App_ref (l1, l2) -> App (to_lambda l1, to_lambda l2) in
   let rec subst substitute expr var = match !expr with
     | Var_ref x -> if x = var then expr := !substitute
-    | Abs_ref(x, l) -> if x <> var then subst substitute l var
-    | App_ref(l1, l2) -> subst substitute l1 var; subst substitute l2 var in 
+    | Abs_ref (x, l) -> if x <> var then subst substitute l var
+    | App_ref (l1, l2) -> subst substitute l1 var; subst substitute l2 var in 
   let rec copy lambda map = match !lambda with 
     | Var_ref x -> 
       (try ref (Map.find x map) with _ -> ref (Var_ref x))
-    | Abs_ref(x, l) -> let name = next_name() in ref (Abs_ref(name, copy l (Map.add x (Var_ref name) map)))
-    | App_ref(l1, l2) -> 
-      ref (App_ref(copy l1 map, copy l2 map)) in
+    | Abs_ref (x, l) -> let name = next_name() in ref (Abs_ref (name, copy l (Map.add x (Var_ref name) map)))
+    | App_ref (l1, l2) -> 
+      ref (App_ref (copy l1 map, copy l2 map)) in
   let rec reduction_with_memoization lambda = match !lambda with
     | Var_ref x -> false
     | Abs_ref (x, l) -> reduction_with_memoization l
     | App_ref (l1, l2) -> (match !l1 with
       | Abs_ref (x, l) -> 
-        lambda := !(copy lambda Map.empty); subst l2 lambda x; true
+        lambda := !(copy l Map.empty); subst l2 lambda x; true
       | _ -> 
         reduction_with_memoization l1 || reduction_with_memoization l2
       ) in
