@@ -3,6 +3,7 @@ open Hw2_unify
 open Hw1_reduction
 
 module Map = Map.Make(String);;
+module Set = Set.Make(String);;
 
 type simp_type 
   = S_Elem of string 
@@ -62,4 +63,78 @@ let infer_simp_type lambda =
     Unknown_term_exception -> None
 ;;
 
-let algorithm_w = failwith "Not implemented yet";;
+exception Type_exception;;
+
+let algorithm_w hm_lmd = 
+  let rec subst substitute hm_type set = match hm_type with
+    | HM_Elem a -> 
+      if Set.mem a set then 
+        hm_type 
+      else if Map.mem a substitute then 
+        Map.find a substitute 
+      else 
+        hm_type
+    | HM_Arrow (a, b) -> HM_Arrow (subst substitute a set, subst substitute b set)
+    | HM_ForAll (a, b) -> HM_ForAll (a, subst substitute b (Set.add a set)) in
+  let free_types hm_type = 
+    let rec free_types_impl hm_type set = match hm_type with
+      | HM_Elem (a) -> if Set.mem a set then Set.empty else Set.singleton a
+      | HM_Arrow (a, b) -> Set.union (free_types_impl a set) (free_types_impl b set)
+      | HM_ForAll (a, b) -> free_types_impl b (Set.add a set)
+    in free_types_impl hm_type Set.empty in
+  let free_vars_hm hm_lambda = 
+    let rec free_vars_hm_impl hm_lambda set = match hm_lambda with
+      | HM_Var (a) -> if Set.mem a set then Set.empty else Set.singleton a
+      | HM_App (a, b) -> Set.union (free_vars_hm_impl a set) (free_vars_hm_impl b set)
+      | HM_Abs (a, b) -> free_vars_hm_impl b (Set.add a set)
+      | HM_Let (a, b, c) -> Set.union (free_vars_hm_impl b set) (free_vars_hm_impl c (Set.add a set))
+    in free_vars_hm_impl hm_lambda Set.empty in
+  let rec rm_union hm_type = match hm_type with
+    | HM_ForAll (a, b) -> subst (Map.add a (HM_Elem (next_type ())) Map.empty) (rm_union b) Set.empty
+    | _ -> hm_type in
+  let add_union hm_type types = 
+    let availble_types = Map.fold (fun a b set -> Set.union (free_types b) set) types Set.empty in
+    let f = fun a b -> if Set.mem a availble_types then b else Set.add a b in
+    Set.fold (fun a b -> HM_ForAll (a, b)) (Set.fold f (free_types hm_type) Set.empty) hm_type in
+  let subst_types substitute types = 
+    Map.fold (fun a b map -> Map.add a (subst substitute b Set.empty) map) types Map.empty in
+  let rec term_of_hm_type hm_type = match hm_type with
+    | HM_Elem a -> Hw2_unify.Var a
+    | HM_Arrow (a, b) -> Hw2_unify.Fun ("arrow", [(term_of_hm_type a);(term_of_hm_type b)])
+    | _ -> raise Type_exception in
+  let rec hm_type_of_term term = match term with
+    | Hw2_unify.Var a -> HM_Elem a 
+    | Hw2_unify.Fun (name, [l;r]) -> HM_Arrow (hm_type_of_term l, hm_type_of_term r)
+    | _ -> raise Type_exception in
+  let combine_subst subst1 subst2 = 
+    Map.fold (fun a b map -> if Map.mem a map then map else Map.add a b map) subst1
+      (Map.fold (fun a b map -> Map.add a (subst subst1 b Set.empty) map) subst2 Map.empty) in
+  let rec algorithm_w_impl hm_lambda types = match hm_lambda with
+    | HM_Var x  -> 
+      if Map.mem x types then 
+        (rm_union (Map.find x types), Map.empty) 
+      else 
+        raise Type_exception
+    | HM_App (e1, e2) ->
+      (let (hmt1, t1) = algorithm_w_impl e1 types in
+      let (hmt2, t2) = algorithm_w_impl e2 (subst_types t1 types) in
+      let new_type = HM_Elem (next_type ()) in
+      match solve_system ([((term_of_hm_type (subst t2 hmt1 Set.empty)), (term_of_hm_type (HM_Arrow(hmt2, new_type))))]) with
+        | None -> raise Type_exception
+        | Some ans -> let ans_types = combine_subst (List.fold_left (fun map (str, term) -> Map.add str (hm_type_of_term term) map) Map.empty ans) (combine_subst t2 t1) in
+          (subst ans_types new_type Set.empty, ans_types)
+      )
+    | HM_Abs (x, e) -> 
+      let new_type = HM_Elem (next_type ()) in
+      let (hmt1, t1) = algorithm_w_impl e (Map.add x new_type (Map.remove x types)) in
+      (HM_Arrow(subst t1 new_type Set.empty, hmt1), t1)
+    | HM_Let (x, e1, e2) -> let (hmt1, t1) = algorithm_w_impl e1 types in
+      let new_types = subst_types t1 types in
+      let (hmt2, t2) = algorithm_w_impl e2 (Map.add x (add_union hmt1 new_types) (Map.remove x new_types)) in
+      (hmt2, combine_subst t2 t1) in
+  let types = Set.fold (fun a map -> Map.add a (HM_Elem (next_type ())) map) (free_vars_hm hm_lmd) (Map.empty) in
+  try
+    let (tp, map) = algorithm_w_impl hm_lmd types in Some (Map.bindings map, tp)
+  with 
+    Type_exception -> None
+;;
